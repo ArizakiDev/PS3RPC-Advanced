@@ -26,8 +26,8 @@ Partagez vos sessions de jeu PS3 directement sur Discord avec une intégration r
 ## 📥 Téléchargement
 
 Deux versions disponibles :
-- [PS3RPD.exe](https://github.com/ArizakiDev/PS3RPC-Advanced/releases/download/latest/PS3RPC_Advanced.exe)
-- [PS3RPD.py](https://github.com/ArizakiDev/PS3RPC-Advanced/releases/download/latest/PS3RPC_Advanced.py)
+- [PS3RPC_Advanced.exe](https://github.com/ArizakiDev/PS3RPC-Advanced/releases/latest/)
+- [PS3RPC_Advanced.py](https://github.com/ArizakiDev/PS3RPC-Advanced/releases/latest/)
 
 ⚠️ **Note :** Le fichier exécutable peut être signalé comme un faux positif antivirus.
 
