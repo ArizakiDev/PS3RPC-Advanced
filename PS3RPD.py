@@ -1,48 +1,42 @@
+# 🚀 PS3 Discord Rich Presence Script
+# 💻 Edited with ❤️ by Arizaki
+
 import json
 from pathlib import Path
-from socket import socket, AF_INET, SOCK_DGRAM  # used to get host IP address
-import re  # used for regular expressions
-import networkscan  # used for automatic obtaining IP address, requires pip install
-import os  # used to test if config exists
-import requests  # used to test if given IP belongs to PS3, requires pip install
-from requests.exceptions import (
-    ConnectionError,
-)  # used to handle thrown errors on connecting to webpage
-from bs4 import BeautifulSoup  # used for webpage scraping, requires pip install
-from time import (
-    sleep,
-)  # used to add delay to mitigate rate limiting and webmanMOD memory consumption
-import subprocess  # used to send ICMP  ping packets to PS3
-import platform  # used to get operating system of PC
-import sqlite3  # used for getting image from database
-from pypresence import (
-    Presence,
-    InvalidPipe,
-    InvalidID,
-    DiscordNotFound,
-)  # used for sending details to Discord, requires pip install
-from time import time
+from socket import socket, AF_INET, SOCK_DGRAM
+import re
+import networkscan
+import os
+import requests
+from requests.exceptions import ConnectionError
+from bs4 import BeautifulSoup
+from time import sleep, time
+import subprocess
+import platform
+import sqlite3
+from pypresence import Presence, InvalidPipe, InvalidID, DiscordNotFound
+import random
 
-
+# 🔧 Configuration par défaut
 default_config = {
-    "ip": "",
-    "client_id": 780389261870235650,
-    "wait_seconds": 35,
-    "show_temp": True,
-    "retro_covers": False,
-    "show_elapsed": True,
-    "hibernate_seconds": 600,
-    "ip_prompt": True,
-    "show_timer": True,
+    "ip": "",               # 🌐 Adresse IP PS3
+    "client_id": 780389261870235650,  # 🤖 ID client Discord
+    "wait_seconds": 35,     # ⏱️ Intervalle de mise à jour
+    "show_temp": True,      # 🌡️ Afficher températures
+    "retro_covers": False,  # 🕹️ Couverts rétro
+    "show_elapsed": True,   # ⏳ Montrer temps écoulé
+    "hibernate_seconds": 600,  # 💤 Temps d'hibernation
+    "ip_prompt": True,      # 🖥️ Invite IP
+    "show_timer": True,     # ⏲️ Afficher minuteur
 }
 
-
-class PrepWork:  # Python2 class should be "class PrepWork(object):" ?
+class PrepWork:
+    """🛠️ Préparation et configuration initiale"""
     config_path = Path("config.txt")
 
     def __init__(self):
-        self.RPC = None
-        self.config = {}
+        self.RPC = None     # 🔌 Connexion Discord RPC
+        self.config = {}    # 📝 Configuration
 
     def read_config(self):
         if self.config_path.is_file():
@@ -154,25 +148,28 @@ class PrepWork:  # Python2 class should be "class PrepWork(object):" ?
             json.dump(self.config, f, indent=4)
 
     def connect_to_discord(self):
+        """🤝 Connexion résiliente à Discord avec délai exponentiel"""
+        retry_delay = 5
         while True:
             try:
                 self.RPC = Presence(self.config["client_id"])
                 self.RPC.connect()
-                print("connected to Discord client")
+                print("🎉 Connecté au client Discord")
                 break
             except DiscordNotFound as e:
-                print(f'could not find Discord client running. "{e}"')
-                sleep(20)
-
+                print(f'❌ Discord introuvable : "{e}"')
+                sleep(retry_delay)
+                retry_delay *= 2  # Double the delay each time
 
 class GatherDetails:
+    """🕹️ Collecte des détails de la PS3"""
     def __init__(self):
-        self.soup = None
-        self.thermalData = None
-        self.name = None
-        self.titleID = None
-        self.image = None
-        self.isRetroGame = False
+        self.soup = None        # 🌐 Données HTML
+        self.thermalData = None # 🌡️ Données thermiques
+        self.name = None        # 🎮 Nom du jeu
+        self.titleID = None     # 🏷️ ID du titre
+        self.image = None       # 🖼️ Image de couverture
+        self.isRetroGame = False # 🕹️ Jeu rétro ?
 
     def ping_PS3(
         self,
@@ -332,7 +329,7 @@ class GatherDetails:
                 f'titleID "{self.titleID}" not found in database, using Discord developer application'
             )
             con.close()
-            return self.titleID.lower()  # bandaid fix
+            return self.get_random_fallback_image()  # fallback image
         else:
             imgName = result[0][2]  # [][0] = titleID, [][1] = name, [][2] = imageURL
             imgName = re.sub(
@@ -358,7 +355,7 @@ class GatherDetails:
             print(
                 f"! use_gametdb(): Unexpected key: {self.titleID[2]} ! \nFalling back to Discord dev app images"
             )
-            return self.titleID.lower()  # bandaid fix, use Discord dev app
+            return self.get_random_fallback_image()  # fallback image
         else:
             url = f"https://art.gametdb.com/ps3/cover/{val}/{self.titleID}.jpg"  # build URL
             status = requests.get(url)
@@ -369,7 +366,7 @@ class GatherDetails:
                 print(
                     f"use_gametdb(): no image found at {url}, using Discord dev app image"
                 )
-                return self.titleID.lower()  # bandaid fix, use Discord dev app
+                return self.get_random_fallback_image()  # fallback image
 
     def get_retro_image(self):  # uses 'name' for image names
         # apply Discord developer application naming conventions
@@ -385,72 +382,84 @@ class GatherDetails:
         self.image = imgName
         print(f"get_retro_image():  {imgName}")
 
+    def get_random_fallback_image(self):
+        """🎲 Sélectionne une image de secours aléatoire"""
+        fallback_images_url = "https://ps3rpc.web.app/img.json"  # URL du fichier JSON contenant les liens des images de secours
+        try:
+            response = requests.get(fallback_images_url)
+            fallback_images = response.json()
+            return random.choice(fallback_images)
+        except Exception as e:
+            print(f"Error fetching fallback images: {e}")
+            return "https://imgur.com/liWnlE6.png"  # fallback image
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}  # Alternatively {'Content-Type': 'text/html'}. Used by both classes
-wmanVer = "1.47.45"  # static string so I can indicate what ver the script was last tested with
+# 🚀 Point d'entrée principal
+if __name__ == "__main__":
+    headers = {"User-Agent": "Mozilla/5.0"}  # 🌐 En-têtes réseau
+    wmanVer = "1.47.45"  # 🏷️ Version testée
 
-prepWork = PrepWork()
-prepWork.read_config()  # runs through majority of functions in PrepWork class
-prepWork.connect_to_discord()  # running NetworkScan before PyPresence breaks asyncIO, I am not motivated enough to find proper fix.
-closed = False  # boolean for RPC pipe
-gatherDetails = GatherDetails()
-timer = None  # default value for if config set to false
-if prepWork.config["show_timer"]:
-    timer = time()  # start timer
-prevTitle = ""  # set default value to be compared in get_PS3_details()
+    prepWork = PrepWork()
+    prepWork.read_config()
+    prepWork.connect_to_discord()
 
-if (
-    prepWork.config["ip"] is None
-):  # very basic error notification for if PrepWork breaks
-    exit("script failed to execute critical functions.")
+    # 🎛️ Variables de contrôle
+    closed = False
+    gatherDetails = GatherDetails()
+    timer = time() if prepWork.config["show_timer"] else None
+    prevTitle = ""
 
-while True:
-    if not gatherDetails.get_html():  # triggered if webman goes down
-        if (
-            gatherDetails.isRetroGame is True
-        ):  # should only occur if PS2 game is mounted
-            print(
-                f"PS2 game previously mounted, keeping RPC active and waiting {prepWork.config['wait_seconds']} seconds"
-            )
-            sleep(prepWork.config["wait_seconds"])
-        else:
-            print(
-                f"PS3 not found on network, closing RPC and hibernating {prepWork.config['hibernate_seconds']} seconds."
-            )
-            if not closed:
-                prepWork.RPC.clear()
-            prepWork.RPC.close()  # destroy pipe
-            closed = True
-            sleep(float(prepWork.config["hibernate_seconds"]))
-    else:  # continue with normal program loop
-        print("")
-        if closed:  # decide if RPC needs to be reconnected
-            prepWork.connect_to_discord()
-            timer = time()
-            closed = False
-        if prepWork.config["show_temp"]:  # first character of variable in lowercase
-            gatherDetails.get_thermals()
-            gatherDetails.thermalData = gatherDetails.thermalData.replace(
+    # 🕵️ Vérification initiale
+    if prepWork.config["ip"] is None:
+        exit("❌ Échec de l'exécution")
+
+    # 🔄 Boucle principale de surveillance
+    while True:
+        if not gatherDetails.get_html():  # triggered if webman goes down
+            if (
+                gatherDetails.isRetroGame is True
+            ):  # should only occur if PS2 game is mounted
+                print(
+                    f"PS2 game previously mounted, keeping RPC active and waiting {prepWork.config['wait_seconds']} seconds"
+                )
+                sleep(prepWork.config["wait_seconds"])
+            else:
+                print(
+                    f"PS3 not found on network, closing RPC and hibernating {prepWork.config['hibernate_seconds']} seconds."
+                )
+                if not closed:
+                    prepWork.RPC.clear()
+                prepWork.RPC.close()  # destroy pipe
+                closed = True
+                sleep(float(prepWork.config["hibernate_seconds"]))
+        else:  # continue with normal program loop
+            print("")
+            if closed:  # decide if RPC needs to be reconnected
+                prepWork.connect_to_discord()
+                timer = time()
+                closed = False
+            if prepWork.config["show_temp"]:  # first character of variable in lowercase
+                gatherDetails.get_thermals()
+                gatherDetails.thermalData = gatherDetails.thermalData.replace(
+                    "Â", ""
+                )  # ! bandaid fix ! ANSI encoding is being used on some users??
+            gatherDetails.decide_game_type()
+            # print(f'{gatherDetails.name}, {gatherDetails.thermalData}, {gatherDetails.image}, {gatherDetails.titleID}')   # debugging
+            gatherDetails.name = gatherDetails.name.replace(
                 "Â", ""
             )  # ! bandaid fix ! ANSI encoding is being used on some users??
-        gatherDetails.decide_game_type()
-        # print(f'{gatherDetails.name}, {gatherDetails.thermalData}, {gatherDetails.image}, {gatherDetails.titleID}')   # debugging
-        gatherDetails.name = gatherDetails.name.replace(
-            "Â", ""
-        )  # ! bandaid fix ! ANSI encoding is being used on some users??
 
-        try:
-            prepWork.RPC.update(
-                details=gatherDetails.name,
-                state=gatherDetails.thermalData,
-                large_image=gatherDetails.image,
-                large_text=gatherDetails.titleID,
-                start=timer,
-            )
-        except (InvalidPipe, InvalidID):
-            prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
-            prepWork.connect_to_discord()  # start connection loop
-        prevTitle = gatherDetails.titleID  # set new value for next loop
-        sleep(prepWork.config["wait_seconds"])
+            try:
+                prepWork.RPC.update(
+                    details=gatherDetails.name,
+                    state=gatherDetails.thermalData,
+                    large_image=gatherDetails.image,
+                    large_text="Made by Arizaki",
+                    start=timer,
+                )
+            except (InvalidPipe, InvalidID):
+                prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
+                prepWork.connect_to_discord()  # start connection loop
+            prevTitle = gatherDetails.titleID  # set new value for next loop
+            sleep(prepWork.config["wait_seconds"])
+
+# 🚀 Enjoy your PS3 Rich Presence!
